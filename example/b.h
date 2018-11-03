@@ -4,6 +4,7 @@
 
 namespace b {
 void print(int, std::string);
+extern const std::string name;
 }
 
 namespace b::a {
