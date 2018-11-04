@@ -1,85 +1,120 @@
 /* slasher.cpp
-This file is part of Symbol Slasher.
+Copyright (C) 2018 Caleb Zulawski
 
-Symbol Slasher is free software: you can redistribute it and/or modify
+This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation, either version 3 of the License, or
 (at your option) any later version.
 
-Symbol Slasher is distributed in the hope that it will be useful,
+This program is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
-along with Symbol Slasher.  If not, see <https://www.gnu.org/licenses/>.
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-extern "C" {
-#include <bfd.h>
-}
-
+#include <LIEF/ELF/Parser.hpp>
+#include <fstream>
 #include <iostream>
 #include <unordered_map>
 #include <vector>
 
-struct Bfd_exception : std::exception {
-  Bfd_exception() : msg(bfd_errmsg(bfd_get_error())) {}
-  const char *what() const noexcept { return msg; }
-
-private:
-  const char *msg = nullptr;
-};
-
 struct Symbol_map {
-  void hash(const char *path) {
-    auto descriptor = bfd_openr(path, nullptr);
-    if (descriptor == nullptr)
-      throw Bfd_exception();
+  Symbol_map(const char *store_path, bool read_only)
+      : store(store_path, read_only
+                              ? std::ios::in
+                              : std::ios::in | std::ios::out | std::ios::app) {
+    // Check that file actually opened
+    if (!store.is_open() || !store.good())
+      throw std::logic_error("failed to open hash store");
 
-    if (!bfd_check_format(descriptor, bfd_object))
-      throw Bfd_exception();
+    // Parse any existing hashes, then reset the stream
+    uint64_t hash;
+    std::string name;
+    while (store >> hash >> name)
+      symbol_map[name] = hash;
 
-    auto symbols_size = bfd_get_dynamic_symtab_upper_bound(descriptor);
-    if (symbols_size < 0)
-      throw Bfd_exception();
-    symbol_cache.resize(symbols_size);
+    store.clear();
+    store.seekg(0, std::ios::beg);
 
-    auto symbols = reinterpret_cast<bfd_symbol **>(symbol_cache.data());
-    auto symbol_count = bfd_canonicalize_dynamic_symtab(descriptor, symbols);
-    if (symbol_count < 0)
-      throw Bfd_exception();
+    next_hash_to_write = symbol_map.size();
+  };
 
-    for (int i = 0; i < symbol_count; i++) {
-      if (symbols[i]->value != 0)
-        symbol_hashes[symbols[i]->name] = symbol_hashes.size();
+  ~Symbol_map() {
+    // Dump only new hashes
+    for (const auto &symbol : symbol_map) {
+      if (symbol.second >= next_hash_to_write)
+        store << symbol.second << " " << symbol.first << std::endl;
     }
   }
 
-  void print() {
-    for (auto symbol : symbol_hashes)
-      std::cout << symbol.second << " " << symbol.first << std::endl;
+  void hash(std::string path) {
+    auto object = LIEF::ELF::Parser::parse(path);
+    if (!object)
+      throw std::logic_error("could not open object file");
+    auto symbols = object->dynamic_symbols();
+    for (auto &symbol : symbols) {
+      if (symbol.value() != 0 && symbol_map.count(symbol.name()) == 0)
+        symbol_map[symbol.name()] = symbol_map.size();
+    }
+  }
+
+  void slash(std::string in_path, std::string out_path) {
+    auto object = LIEF::ELF::Parser::parse(in_path);
+    if (!object)
+      throw std::logic_error("could not open object file");
+    auto symbols = object->dynamic_symbols();
+    for (auto &symbol : symbols) {
+      if (symbol_map.count(symbol.name()))
+        symbol.name("sym_slash_" + std::to_string(symbol_map[symbol.name()]));
+    }
+    object->write(out_path);
   }
 
 private:
-  std::vector<uint8_t> symbol_cache;
-  std::unordered_map<std::string, uint64_t> symbol_hashes;
+  std::fstream store;
+  std::unordered_map<std::string, uint64_t> symbol_map;
+  uint64_t next_hash_to_write;
 };
 
-int main(int argc, char **argv) try {
-  bfd_init();
-  if (argc < 2)
-    return -1;
+void usage(int code) {
+  // clang-format off
+  std::cout << "Usage: symbol-slasher hash|slash <arguments>" << std::endl;
+  std::cout << std::endl;
+  std::cout << "  symbol-slasher hash <store-path> <object-path...>" << std::endl;
+  std::cout << "    Hashes the dynamic symbol names in each object provided by <object-path...>" << std::endl;
+  std::cout << "    and updates the table stored in <store-path>.  If the hash store does not exist," << std::endl;
+  std::cout << "    it is created." << std::endl;
+  std::cout << std::endl;
+  std::cout << "  symbol-slasher slash <store-path> <input-object-path> <output-object-path>"
+            << std::endl;
+  std::cout << "    Replaces all of the symbol names in <input-object-path> with the hashes in" << std::endl;
+  std::cout << "    <store-path> and writes the modified object to <output-object-path>." << std::endl;
+  // clang-format on
+  std::exit(code);
+}
 
-  Symbol_map map;
-  for (int i = 1; i < argc; i++)
-    map.hash(argv[i]);
-  map.print();
+int main(int argc, char **argv) try {
+  if (argc < 2)
+    usage(-1);
+
+  std::string mode(argv[1]);
+  if (mode == "hash") {
+    if (argc < 4)
+      usage(-1);
+    Symbol_map map(argv[2], false);
+    for (int i = 3; i < argc; i++)
+      map.hash(argv[i]);
+  } else if (mode == "slash") {
+    if (argc != 5)
+      usage(-1);
+    Symbol_map map(argv[2], true);
+    map.slash(argv[3], argv[4]);
+  }
   return 0;
-} catch (const Bfd_exception &e) {
-  std::cerr << "libbfd error: " << e.what() << std::endl;
-  return -1;
 } catch (const std::exception &e) {
-  std::cerr << "exception: " << e.what() << std::endl;
+  std::cerr << "Error: " << e.what() << std::endl;
   return -1;
 }
