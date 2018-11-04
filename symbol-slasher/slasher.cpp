@@ -16,10 +16,10 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
 #include <LIEF/ELF/Parser.hpp>
+#include <cstdlib>
 #include <fstream>
 #include <iostream>
 #include <unordered_map>
-#include <vector>
 
 struct Symbol_map {
   Symbol_map(const char *store_path, bool read_only)
