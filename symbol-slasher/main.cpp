@@ -66,12 +66,13 @@ int hash(int argc, char **argv) {
   options.add_options()
       ("h,help", "print this help")
       ("s,symbols", "path to the store of symbol hashes", cxxopts::value(store_path)->default_value("symbol_hashes"))
-      ("i,input_object_path", "object to read", cxxopts::value(input_object_path))
-      ("o,output_object_path", "new object to create", cxxopts::value(output_object_path))
+      ("k,keep-static", "do not discard static symbols")
+      ("i,input-object-path", "object to read", cxxopts::value(input_object_path))
+      ("o,output-object-path", "new object to create", cxxopts::value(output_object_path))
       ;
   // clang-format on
-  options.parse_positional({"input_object_path", "output_object_path"});
-  options.positional_help("input_object_path output_object_path");
+  options.parse_positional({"input-object-path", "output-object-path"});
+  options.positional_help("input-object-path output-object-path");
   auto args = options.parse(argc, argv);
 
   if (args.count("help")) {
@@ -79,7 +80,7 @@ int hash(int argc, char **argv) {
     return 0;
   }
 
-  slasher::Hasher hasher;
+  slasher::Hasher hasher(args.count("keep-static"));
   hasher.open(store_path.c_str());
   hasher(input_object_path, output_object_path);
   return 0;

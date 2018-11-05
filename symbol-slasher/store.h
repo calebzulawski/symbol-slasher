@@ -134,7 +134,7 @@ struct Inserter : public Forward_map {
 };
 
 struct Hasher : public Forward_map {
-  Hasher() : Forward_map(true) {}
+  Hasher(bool keep_static) : Forward_map(true), keep_static(keep_static) {}
 
   void operator()(std::string in_path, std::string out_path) {
     std::unique_ptr<LIEF::ELF::Binary> object;
@@ -145,15 +145,19 @@ struct Hasher : public Forward_map {
     }
     if (!object)
       throw std::logic_error("Could not open object file for reading");
-    auto symbols = object->dynamic_symbols();
-    for (auto &symbol : symbols)
+    for (auto &symbol : object->dynamic_symbols())
       symbol.name(hash(symbol.name()));
+    if (!keep_static)
+      object->remove(object->static_symbols_section(), true);
     try {
       object->write(out_path);
     } catch (...) {
       throw std::logic_error("Could not open object file for writing");
     }
   }
+
+private:
+  bool keep_static;
 };
 
 struct Dehasher : public Reverse_map {
