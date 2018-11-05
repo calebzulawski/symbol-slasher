@@ -21,6 +21,7 @@ along with Symbol Slasher.  If not, see <https://www.gnu.org/licenses/>.
 #define SYMBOL_SLASHER_STORE_H_
 
 #include <LIEF/ELF/Parser.hpp>
+#include <filesystem>
 #include <fstream>
 #include <string>
 #include <unordered_map>
@@ -32,7 +33,7 @@ constexpr auto prefix = "symslash";
 struct Store_base {
   Store_base(bool read_only) : read_only(read_only) {}
 
-  virtual void open(const char *store_path) {
+  virtual void open(std::filesystem::path store_path) {
     store.open(store_path, read_only
                                ? std::ios::in
                                : std::ios::in | std::ios::out | std::ios::app);
@@ -65,7 +66,7 @@ private:
 struct Forward_map : public Store_base {
   Forward_map(bool read_only) : Store_base(read_only) {}
 
-  void open(const char *store_path) {
+  void open(std::filesystem::path store_path) {
     Store_base::open(store_path);
     next_hash_to_write = symbol_map.size();
   }
@@ -115,16 +116,37 @@ private:
   std::unordered_map<std::string, std::string> symbol_map;
 };
 
+std::unique_ptr<LIEF::ELF::Binary>
+load_binary(std::filesystem::path object_path) {
+  std::unique_ptr<LIEF::ELF::Binary> object;
+  try {
+    object = LIEF::ELF::Parser::parse(object_path);
+  } catch (...) {
+    throw std::logic_error("Could not open object file for reading");
+  }
+  if (!object)
+    throw std::logic_error("Could not open object file for reading");
+  return object;
+}
+
+void store_binary(std::filesystem::path in_path, std::filesystem::path out_path,
+                  std::unique_ptr<LIEF::ELF::Binary> &object) {
+  try {
+    object->write(out_path);
+  } catch (...) {
+    throw std::logic_error("Could not open object file for writing");
+  }
+
+  // Copy file permissions
+  std::filesystem::permissions(out_path,
+                               std::filesystem::status(in_path).permissions());
+}
+
 struct Inserter : public Forward_map {
   Inserter() : Forward_map(false) {}
 
-  void operator()(std::string path) {
-    std::unique_ptr<LIEF::ELF::Binary> object;
-    try {
-      object = LIEF::ELF::Parser::parse(path);
-    } catch (...) {
-      throw std::logic_error("Could not open object file for reading");
-    }
+  void operator()(std::filesystem::path object_path) {
+    auto object = load_binary(object_path);
     auto symbols = object->dynamic_symbols();
     for (auto &symbol : symbols) {
       if (symbol.value() != 0)
@@ -136,24 +158,14 @@ struct Inserter : public Forward_map {
 struct Hasher : public Forward_map {
   Hasher(bool keep_static) : Forward_map(true), keep_static(keep_static) {}
 
-  void operator()(std::string in_path, std::string out_path) {
-    std::unique_ptr<LIEF::ELF::Binary> object;
-    try {
-      object = LIEF::ELF::Parser::parse(in_path);
-    } catch (...) {
-      throw std::logic_error("Could not open object file for reading");
-    }
-    if (!object)
-      throw std::logic_error("Could not open object file for reading");
+  void operator()(std::filesystem::path in_path,
+                  std::filesystem::path out_path) {
+    auto object = load_binary(in_path);
     for (auto &symbol : object->dynamic_symbols())
       symbol.name(hash(symbol.name()));
     if (!keep_static)
       object->remove(object->static_symbols_section(), true);
-    try {
-      object->write(out_path);
-    } catch (...) {
-      throw std::logic_error("Could not open object file for writing");
-    }
+    store_binary(in_path, out_path, object);
   }
 
 private:
@@ -162,22 +174,11 @@ private:
 
 struct Dehasher : public Reverse_map {
   void operator()(std::string in_path, std::string out_path) {
-    std::unique_ptr<LIEF::ELF::Binary> object;
-    try {
-      object = LIEF::ELF::Parser::parse(in_path);
-    } catch (...) {
-      throw std::logic_error("Could not open object file for reading");
-    }
-    if (!object)
-      throw std::logic_error("Could not open object file for reading");
+    auto object = load_binary(in_path);
     auto symbols = object->dynamic_symbols();
     for (auto &symbol : symbols)
       symbol.name(dehash(symbol.name()));
-    try {
-      object->write(out_path);
-    } catch (...) {
-      throw std::logic_error("Could not open object file for writing");
-    }
+    store_binary(in_path, out_path, object);
   }
 };
 

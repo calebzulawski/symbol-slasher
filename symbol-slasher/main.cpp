@@ -51,7 +51,7 @@ int insert(int argc, char **argv) {
   }
 
   slasher::Inserter inserter;
-  inserter.open(store_path.c_str());
+  inserter.open(store_path);
   for (const auto &object_path : object_paths)
     inserter(object_path);
   return 0;
@@ -81,7 +81,7 @@ int hash(int argc, char **argv) {
   }
 
   slasher::Hasher hasher(args.count("keep-static"));
-  hasher.open(store_path.c_str());
+  hasher.open(store_path);
   hasher(input_object_path, output_object_path);
   return 0;
 }
@@ -109,7 +109,7 @@ int dehash(int argc, char **argv) {
   }
 
   slasher::Dehasher dehasher;
-  dehasher.open(store_path.c_str());
+  dehasher.open(store_path);
   dehasher(input_object_path, output_object_path);
   return 0;
 }
