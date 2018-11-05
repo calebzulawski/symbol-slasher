@@ -1,26 +1,31 @@
-/* slasher.cpp
+/* store.h
 Copyright (C) 2018 Caleb Zulawski
 
-This program is free software: you can redistribute it and/or modify
+This file is part of Symbol Slasher.
+
+Symbol Slasher is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation, either version 3 of the License, or
 (at your option) any later version.
 
-This program is distributed in the hope that it will be useful,
+Symbol Slasher is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
-along with this program.  If not, see <https://www.gnu.org/licenses/>.
+along with Symbol Slasher.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+#ifndef SYMBOL_SLASHER_STORE_H_
+#define SYMBOL_SLASHER_STORE_H_
+
 #include <LIEF/ELF/Parser.hpp>
-#include <cstdlib>
 #include <fstream>
-#include <iostream>
 #include <string>
 #include <unordered_map>
+
+namespace slasher {
 
 constexpr auto prefix = "symslash";
 
@@ -114,9 +119,12 @@ struct Inserter : public Forward_map {
   Inserter() : Forward_map(false) {}
 
   void operator()(std::string path) {
-    auto object = LIEF::ELF::Parser::parse(path);
-    if (!object)
-      throw std::logic_error("could not open object file");
+    std::unique_ptr<LIEF::ELF::Binary> object;
+    try {
+      object = LIEF::ELF::Parser::parse(path);
+    } catch (...) {
+      throw std::logic_error("Could not open object file for reading");
+    }
     auto symbols = object->dynamic_symbols();
     for (auto &symbol : symbols) {
       if (symbol.value() != 0)
@@ -129,77 +137,46 @@ struct Hasher : public Forward_map {
   Hasher() : Forward_map(true) {}
 
   void operator()(std::string in_path, std::string out_path) {
-    auto object = LIEF::ELF::Parser::parse(in_path);
+    std::unique_ptr<LIEF::ELF::Binary> object;
+    try {
+      object = LIEF::ELF::Parser::parse(in_path);
+    } catch (...) {
+      throw std::logic_error("Could not open object file for reading");
+    }
     if (!object)
-      throw std::logic_error("could not open object file");
+      throw std::logic_error("Could not open object file for reading");
     auto symbols = object->dynamic_symbols();
     for (auto &symbol : symbols)
       symbol.name(hash(symbol.name()));
-    object->write(out_path);
+    try {
+      object->write(out_path);
+    } catch (...) {
+      throw std::logic_error("Could not open object file for writing");
+    }
   }
 };
 
 struct Dehasher : public Reverse_map {
   void operator()(std::string in_path, std::string out_path) {
-    auto object = LIEF::ELF::Parser::parse(in_path);
+    std::unique_ptr<LIEF::ELF::Binary> object;
+    try {
+      object = LIEF::ELF::Parser::parse(in_path);
+    } catch (...) {
+      throw std::logic_error("Could not open object file for reading");
+    }
     if (!object)
-      throw std::logic_error("could not open object file");
+      throw std::logic_error("Could not open object file for reading");
     auto symbols = object->dynamic_symbols();
     for (auto &symbol : symbols)
       symbol.name(dehash(symbol.name()));
-    object->write(out_path);
+    try {
+      object->write(out_path);
+    } catch (...) {
+      throw std::logic_error("Could not open object file for writing");
+    }
   }
 };
 
-void usage(int code) {
-  // clang-format off
-  std::cout << "Usage: symbol-slasher hash|slash <arguments>" << std::endl;
-  std::cout << std::endl;
-  std::cout << "  symbol-slasher insert <store-path> <object-path...>" << std::endl;
-  std::cout << "    Hashes the dynamic symbol names in each object provided by <object-path...>" << std::endl;
-  std::cout << "    and updates the table stored in <store-path>.  If the hash store does not exist," << std::endl;
-  std::cout << "    it is created." << std::endl;
-  std::cout << std::endl;
-  std::cout << "  symbol-slasher hash <store-path> <input-object-path> <output-object-path>"
-            << std::endl;
-  std::cout << "    Replaces all of the symbol names in <input-object-path> with the hashes in" << std::endl;
-  std::cout << "    <store-path> and writes the modified object to <output-object-path>." << std::endl;
-  std::cout << std::endl;
-  std::cout << "  symbol-slasher dehash <store-path> <input-object-path> <output-object-path>"
-            << std::endl;
-  std::cout << "    Replaces all of the hashed symbol names in <input-object-path> with original names in" << std::endl;
-  std::cout << "    <store-path> and writes the modified object to <output-object-path>." << std::endl;
-  // clang-format on
-  std::exit(code);
-}
+} // namespace slasher
 
-int main(int argc, char **argv) try {
-  if (argc < 2)
-    usage(-1);
-
-  std::string mode(argv[1]);
-  if (mode == "insert") {
-    if (argc < 4)
-      usage(-1);
-    Inserter inserter;
-    inserter.open(argv[2]);
-    for (int i = 3; i < argc; i++)
-      inserter(argv[i]);
-  } else if (mode == "hash") {
-    if (argc != 5)
-      usage(-1);
-    Hasher hasher;
-    hasher.open(argv[2]);
-    hasher(argv[3], argv[4]);
-  } else if (mode == "dehash") {
-    if (argc != 5)
-      usage(-1);
-    Dehasher dehasher;
-    dehasher.open(argv[2]);
-    dehasher(argv[3], argv[4]);
-  }
-  return 0;
-} catch (const std::exception &e) {
-  std::cerr << "Error: " << e.what() << std::endl;
-  return -1;
-}
+#endif // SYMBOL_SLASHER_STORE_H_
