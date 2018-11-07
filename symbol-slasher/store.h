@@ -23,8 +23,11 @@ along with Symbol Slasher.  If not, see <https://www.gnu.org/licenses/>.
 #include <LIEF/ELF/Parser.hpp>
 #include <filesystem>
 #include <fstream>
+#include <nlohmann/json.hpp>
 #include <string>
 #include <unordered_map>
+
+using json = nlohmann::json;
 
 namespace slasher {
 
@@ -33,29 +36,26 @@ constexpr auto prefix = "symslash";
 struct Store_base {
   Store_base(bool read_only) : read_only(read_only) {}
 
-  virtual void open(std::filesystem::path store_path) {
-    store.open(store_path, read_only
-                               ? std::ios::in
-                               : std::ios::in | std::ios::out | std::ios::app);
+  void open(std::filesystem::path store_path) {
+    this->store_path = store_path;
+    std::ifstream store_stream(store_path);
 
-    // Check that file actually opened
-    if (!store.is_open() || !store.good())
+    if (store_stream.is_open() && store_stream.good()) {
+      if (store_stream.peek() != std::ifstream::traits_type::eof()) {
+        json store;
+        store_stream >> store;
+        for (auto &symbol : store["symbols"])
+          insert(symbol["name"], symbol["hash"]);
+      }
+    } else if (read_only) {
       throw std::logic_error("failed to open hash store");
-
-    // Parse any existing hashes, then reset the stream
-    uint64_t hash;
-    std::string name;
-    while (store >> hash >> name)
-      insert(name, hash);
-
-    store.clear();
-    store.seekg(0, std::ios::beg);
+    }
   }
 
   virtual ~Store_base(){};
 
 protected:
-  std::fstream store;
+  std::filesystem::path store_path;
 
   const bool read_only;
 
@@ -66,18 +66,18 @@ private:
 struct Forward_map : public Store_base {
   Forward_map(bool read_only) : Store_base(read_only) {}
 
-  void open(std::filesystem::path store_path) {
-    Store_base::open(store_path);
-    next_hash_to_write = symbol_map.size();
-  }
-
   ~Forward_map() {
     // Dump only new hashes
     if (!read_only) {
-      for (const auto &symbol : symbol_map) {
-        if (symbol.second >= next_hash_to_write)
-          store << symbol.second << " " << symbol.first << std::endl;
+      std::ofstream store_stream(store_path);
+      json store;
+      for (const auto &[name, hash] : symbol_map) {
+        json symbol;
+        symbol["name"] = name;
+        symbol["hash"] = hash;
+        store["symbols"].push_back(symbol);
       }
+      store >> store_stream;
     }
   }
 
@@ -98,7 +98,6 @@ private:
   }
 
   std::unordered_map<std::string, uint64_t> symbol_map;
-  uint64_t next_hash_to_write;
 };
 
 struct Reverse_map : public Store_base {

@@ -37,7 +37,7 @@ int insert(int argc, char **argv) {
   // clang-format off
   options.add_options()
       ("h,help", "print this help")
-      ("s,symbols", "path to the store of symbol hashes", cxxopts::value(store_path)->default_value("symbol_hashes"))
+      ("s,symbols", "path to the store of symbol hashes", cxxopts::value(store_path)->default_value("symbols.json"))
       ("object_paths", "paths of objects to read", cxxopts::value(object_paths))
       ;
   // clang-format on
@@ -65,7 +65,7 @@ int hash(int argc, char **argv) {
   // clang-format off
   options.add_options()
       ("h,help", "print this help")
-      ("s,symbols", "path to the store of symbol hashes", cxxopts::value(store_path)->default_value("symbol_hashes"))
+      ("s,symbols", "path to the store of symbol hashes", cxxopts::value(store_path)->default_value("symbols.json"))
       ("k,keep-static", "do not discard static symbols")
       ("i,input-object-path", "object to read", cxxopts::value(input_object_path))
       ("o,output-object-path", "new object to create", cxxopts::value(output_object_path))
@@ -94,7 +94,7 @@ int dehash(int argc, char **argv) {
   // clang-format off
   options.add_options()
       ("h,help", "print this help")
-      ("s,symbols", "path to the store of symbol hashes", cxxopts::value(store_path)->default_value("symbol_hashes"))
+      ("s,symbols", "path to the store of symbol hashes", cxxopts::value(store_path)->default_value("symbols.json"))
       ("i,input_object_path", "object to read", cxxopts::value(input_object_path))
       ("o,output_object_path", "new object to create", cxxopts::value(output_object_path))
       ;
