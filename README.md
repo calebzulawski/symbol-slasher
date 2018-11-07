@@ -20,7 +20,7 @@ cd build && ninja
 ## Example
 This section assumes you have built the example libraries and executable in `/example`.
 
-Each library contains a simple print function.  For example, some snippets from `nm -DC`:
+Example library `liba.so` contains a simple print function.  Example library `libb.so` contains its own print function, plus a wrapper for `liba.so`'s print function.  The executable `main` calls all three print functions.  Some snippets from `nm -DC`:
 ```
 liba.so:
 00000000000011a5 T a::print(int, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >)
