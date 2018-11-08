@@ -1,5 +1,6 @@
 <div align="center">
   <img src="logo.svg" width="50%" height="auto">
+</div>
 
 Symbol Slasher renames dynamic symbols on already-linked binaries.
 This obfuscates the interactions with private libraries, or simply prevents future linking to those libraries.
