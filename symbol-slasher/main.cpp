@@ -143,7 +143,7 @@ int list(int argc, char **argv) {
     lister(object_paths.front());
   } else {
     for (const auto &object_path : object_paths) {
-      std::cout << object_path << ":" << std::endl;
+      std::cout << std::endl << object_path << ":" << std::endl;
       lister(object_path);
     }
   }
