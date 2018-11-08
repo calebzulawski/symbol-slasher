@@ -172,13 +172,61 @@ private:
 };
 
 struct Dehasher : public Reverse_map {
-  void operator()(std::string in_path, std::string out_path) {
+  void operator()(std::filesystem::path in_path,
+                  std::filesystem::path out_path) {
     auto object = load_binary(in_path);
     auto symbols = object->dynamic_symbols();
     for (auto &symbol : symbols)
       symbol.name(dehash(symbol.name()));
     store_binary(in_path, out_path, object);
   }
+};
+
+struct Lister : public Reverse_map {
+  Lister(bool demangle) : demangle(demangle) {}
+
+  void operator()(std::filesystem::path object_path) {
+    auto object = load_binary(object_path);
+    auto symbols = object->dynamic_symbols();
+    for (auto &symbol : symbols) {
+      if (symbol.value() == 0) {
+        std::cout << "                ";
+      } else {
+        std::ios_base::fmtflags f(std::cout.flags());
+        std::cout << std::hex << std::setfill('0') << std::setw(16)
+                  << symbol.value();
+        std::cout.flags(f);
+      }
+      std::cout << " ";
+      switch (symbol.binding()) {
+      case LIEF::ELF::SYMBOL_BINDINGS::STB_LOCAL:
+        std::cout << "local ";
+        break;
+      case LIEF::ELF::SYMBOL_BINDINGS::STB_GLOBAL:
+        std::cout << "global";
+        break;
+      case LIEF::ELF::SYMBOL_BINDINGS::STB_WEAK:
+        std::cout << "weak  ";
+        break;
+      default:
+        std::cout << "other ";
+        break;
+      }
+      std::cout << " ";
+      auto dehashed = dehash(symbol.name());
+      if (dehashed != symbol.name()) {
+        std::cout << "(#) " << symbol.name() << " -> ";
+        symbol.name(dehashed);
+      } else {
+        std::cout << "    ";
+      }
+      std::cout << (demangle ? symbol.demangled_name() : symbol.name());
+      std::cout << std::endl;
+    }
+  }
+
+private:
+  bool demangle;
 };
 
 } // namespace slasher

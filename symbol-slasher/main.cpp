@@ -29,6 +29,8 @@ constexpr auto hash_desc = "Replaces the symbol names in an object with the "
                            "hashed equivalent from the symbol store.";
 constexpr auto dehash_desc = "Replaces hashed symbol names in an object with "
                              "the original name from the symbol store.";
+constexpr auto list_desc =
+    "Lists the hashed and dehashed symbol names in an object.";
 
 int insert(int argc, char **argv) {
   std::string store_path;
@@ -114,6 +116,40 @@ int dehash(int argc, char **argv) {
   return 0;
 }
 
+int list(int argc, char **argv) {
+  std::string store_path;
+  std::vector<std::string> object_paths;
+  cxxopts::Options options("symbol-slasher list", list_desc);
+  // clang-format off
+  options.add_options()
+      ("h,help", "print this help")
+      ("s,symbols", "path to the store of symbol hashes", cxxopts::value(store_path)->default_value("symbols.json"))
+      ("d,demangle", "demangle symbols")
+      ("object_paths", "paths of objects to read", cxxopts::value(object_paths))
+      ;
+  // clang-format on
+  options.parse_positional({"object_paths"});
+  options.positional_help("object_path(s)...");
+  auto args = options.parse(argc, argv);
+
+  if (args.count("help")) {
+    std::cout << options.help() << std::endl;
+    return 0;
+  }
+
+  slasher::Lister lister(args.count("demangle"));
+  lister.open(store_path);
+  if (object_paths.size() == 1) {
+    lister(object_paths.front());
+  } else {
+    for (const auto &object_path : object_paths) {
+      std::cout << object_path << ":" << std::endl;
+      lister(object_path);
+    }
+  }
+  return 0;
+}
+
 void help() {
   // clang-format off
   std::cout << "Symbol Slasher: obfuscate shared object libraries by hashing symbol names." << std::endl;
@@ -125,6 +161,7 @@ void help() {
   std::cout << "  insert   " << insert_desc << std::endl;
   std::cout << "  hash     " << hash_desc << std::endl;
   std::cout << "  dehash   " << dehash_desc << std::endl;
+  std::cout << "  list     " << list_desc << std::endl;
   // clang-format on
   std::exit(0);
 }
@@ -142,6 +179,8 @@ int main(int argc, char **argv) try {
     call_mode(hash);
   } else if (mode == "dehash") {
     call_mode(dehash);
+  } else if (mode == "list") {
+    call_mode(list);
   } else {
     throw std::logic_error("invalid command");
   }
