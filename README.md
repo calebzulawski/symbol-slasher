@@ -2,6 +2,7 @@
   <img src="logo.svg" width="50%" height="auto">
 </div>
 
+## Overview
 Symbol Slasher renames dynamic symbols on already-linked binaries.
 This obfuscates the interactions with private libraries, or simply prevents future linking to those libraries.
 
@@ -67,3 +68,6 @@ main:
                  U symslash1
                  U symslash2
 ```
+
+## Credits
+Logo by [Nick](https://github.com/nickells)
